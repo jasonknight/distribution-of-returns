@@ -301,7 +301,7 @@ fn output_positions(_args: &DorArgs, positions: &[Position] ) -> Result<()> {
 }
 
 fn get_highest_high(dps: &[DataPoint]) -> DataPoint {
-    let mut final_dp = dps[0];
+    let mut final_dp = dps[0].clone();
     for dp in dps {
         if dp.high > final_dp.high {
             final_dp = dp.clone();
@@ -311,7 +311,7 @@ fn get_highest_high(dps: &[DataPoint]) -> DataPoint {
 }
 
 fn get_lowest_low(dps: &[DataPoint]) -> DataPoint {
-    let mut final_dp = dps[0];
+    let mut final_dp = dps[0].clone();
     for dp in dps {
         if dp.low < final_dp.low {
             final_dp = dp.clone();
@@ -319,12 +319,14 @@ fn get_lowest_low(dps: &[DataPoint]) -> DataPoint {
     }
     return final_dp;
 }
+#[derive(Clone)]
 enum PositionDirection {
     Long,
     Short,
 }
+#[derive(Clone)]
 struct Position {
-    id: i64;
+    id: i64,
     entry: DataPoint,
     outry: Option<DataPoint>,
     direction: PositionDirection,
@@ -335,11 +337,11 @@ impl Position {
         PRow::new(
             vec![
                 Cell::new(&self.entry.date.format("%Y/%m/%d").to_string()),
-                match self.outry {
+                match &self.outry {
                     Some(o) => Cell::new(&o.date.format("%Y/%m/%d").to_string()),
                     None => Cell::new("None"),
                 },
-                match self.direction {
+                match &self.direction {
                     PositionDirection::Long => {
                         Cell::new(&format!("{:.2}",self.entry.high))
                     },
@@ -349,13 +351,13 @@ impl Position {
                 },
                 match self.direction {
                     PositionDirection::Long => {
-                        match self.outry {
+                        match &self.outry {
                             Some(o) => Cell::new(&format!("{:.2}",o.low)),
                             None => Cell::new("None"),
                         }
                     },
                     PositionDirection::Short => {
-                        match self.outry {
+                        match &self.outry {
                             Some(o) => Cell::new(&format!("{:.2}",o.low)),
                             None => Cell::new("None"),
                         }
@@ -371,16 +373,18 @@ fn turtle(_args: &DorArgs, dps: &[DataPoint]) -> Result<Vec<Position>> {
     // The strategy is to buy at the 55 day high, or short at the 55 day low
     let mut idx = 0;
     let mut positions:Vec<Position> = vec![];
-    let mut position: Option<Position>;
+    let mut position: Option<Position> = Default::default();
     for dp in dps {
         if idx < 55 {
             continue;
         }
-        let cdp = dps[idx];
-        let pdp = get_highest_high(dps[(idx - 55)..(idx - 1)]);
-        let pdp2 = get_lowest_low(dps[(idx - 55)..(idx - 1)]);
+        let cdp = dps[idx].clone();
+        let ghh = &dps[(idx - 55)..(idx - 1)];
+        let pdp = get_highest_high(ghh);
+        let gll = &dps[(idx - 55)..(idx - 1)];
+        let pdp2 = get_lowest_low(gll);
         
-        if let Some(p) = position {
+        if let Some(ref p) = position {
             // if we have a position, then we need to choose:
             // 1) stay in
             // 2) Sell long
@@ -393,10 +397,10 @@ fn turtle(_args: &DorArgs, dps: &[DataPoint]) -> Result<Vec<Position>> {
                     if h2l > 0.0 && h2l >= tenp {
                         // cut the position 
                         positions.push(Position {
-                            id: p.id,
+                            id: p.id.clone(),
                             entry: p.entry.clone(),
-                            outry: cdp.clone(),
-                            direction: p.direction,
+                            outry: Some(cdp.clone()),
+                            direction: p.direction.clone(),
                         });
                         position = None;
                     }
@@ -409,8 +413,8 @@ fn turtle(_args: &DorArgs, dps: &[DataPoint]) -> Result<Vec<Position>> {
                         positions.push(Position {
                             id: p.id,
                             entry: p.entry.clone(),
-                            outry: cdp.clone(),
-                            direction: p.direction,
+                            outry: Some(cdp.clone()),
+                            direction: p.direction.clone(),
                         });
                         position = None;
                     }
@@ -418,14 +422,14 @@ fn turtle(_args: &DorArgs, dps: &[DataPoint]) -> Result<Vec<Position>> {
             }
         } else {
             if cdp.high > pdp.high {
-                position = Some(Position { id: idx, entry: cdp.clone(), outry: None, direction: PositionDirection::Long });
+                position = Some(Position { id: idx as i64, entry: cdp.clone(), outry: None, direction: PositionDirection::Long });
             } else if cdp.low < pdp2.low {
-                position = Some(Position { id: idx, entry: cdp.clone(), outry: None, direction: PositionDirection::Short });
+                position = Some(Position { id: idx as i64, entry: cdp.clone(), outry: None, direction: PositionDirection::Short });
             }
         }
         idx += 1;
     }
-    return positions;
+    Ok(positions)
 }
 
 fn handle_dor(args: &DorArgs) -> Result<()> {
